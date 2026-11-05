@@ -420,6 +420,19 @@ mod tests {
     }
 
     #[test]
+    fn decodes_audio_only_ogg_voice_message() {
+        let data = fixture("voice-tone.ogg");
+        let mut audio = Video::open_sound(std::io::Cursor::new(data)).expect("Ogg/Opus decoder");
+        assert_eq!((audio.width, audio.height), (0, 0));
+        assert!(audio.sound.is_some());
+        let mut samples = 0usize;
+        while let Some(_) = audio.decode_sound().expect("decode audio") {
+            samples += audio.sound().samples.len();
+        }
+        assert!(samples > 0, "Opus samples were decoded");
+    }
+
+    #[test]
     fn recognises_video_files() {
         assert!(is_video(b"\0\0\0\x20ftypisom"));
         assert!(is_video(&[0x1a, 0x45, 0xdf, 0xa3, 1]));
