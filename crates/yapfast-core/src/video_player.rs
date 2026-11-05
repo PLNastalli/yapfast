@@ -254,6 +254,8 @@ pub struct Playing {
     pub sound: bool,
     pub speakers: Option<String>,
     pub volume: f32,
+    /// Audio-only file, such as a Discord Ogg/Opus voice message.
+    pub audio_only: bool,
 }
 
 /// Plays the video until Yapfast stops it, reporting what it does.
@@ -290,12 +292,16 @@ pub fn play(
             .ok()
         })
         .flatten();
+    if job.audio_only && speaker.is_none() {
+        anyhow::bail!("No audio output device is available.");
+    }
     let decoder = {
         let shared = shared.clone();
         let sound = speaker.is_some();
+        let audio_only = job.audio_only;
         std::thread::Builder::new()
             .name("yapfast-video-decoder".into())
-            .spawn(move || decode(download, sound, &shared))
+            .spawn(move || decode(download, sound, audio_only, &shared))
             .context("could not start decoding the video")?
     };
     let speaker = match speaker {
@@ -460,8 +466,13 @@ fn move_to(shared: &Shared, state: &mut State, time_ms: u64) {
 }
 
 /// The decoder's thread: opens the file, then keeps the queues filled.
-fn decode(download: Download, sound: bool, shared: &Shared) {
-    let Some(mut video) = Video::open(download, sound) else {
+fn decode(download: Download, sound: bool, audio_only: bool, shared: &Shared) {
+    let opened = if audio_only {
+        Video::open_sound(download)
+    } else {
+        Video::open(download, sound)
+    };
+    let Some(mut video) = opened else {
         let mut state = shared.lock();
         if !state.stop {
             state.failed = Some("Yapfast can't play this video.".into());
@@ -530,7 +541,13 @@ fn decode(download: Download, sound: bool, shared: &Shared) {
             };
             (state.generation, state.size, sound_only)
         };
-        let next = if sound_only {
+        let next = if audio_only {
+            match video.decode_sound() {
+                Ok(Some(time)) => Ok(Next::Sound(time)),
+                Ok(None) => Ok(Next::End),
+                Err(error) => Err(error),
+            }
+        } else if sound_only {
             match video.decode_sound() {
                 Ok(Some(time)) => Ok(Next::Sound(time)),
                 Ok(None) => {
@@ -858,6 +875,7 @@ mod tests {
             sound: false,
             speakers: None,
             volume: 1.0,
+            audio_only: false,
         };
         let player = {
             let stop = stop.clone();
@@ -1009,7 +1027,7 @@ mod tests {
             let shared = Arc::new(Shared::new((80, 80), 1.0, interrupt));
             let decoder = {
                 let shared = shared.clone();
-                std::thread::spawn(move || decode(download, true, &shared))
+                std::thread::spawn(move || decode(download, true, false, &shared))
             };
             let started = Instant::now();
             while shared.lock().pictures.len() < QUEUED_PICTURES {
