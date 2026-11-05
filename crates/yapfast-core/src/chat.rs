@@ -1202,6 +1202,14 @@ impl Picture {
     }
 }
 
+/// Audio attachments supported by the native FFmpeg audio-only player.
+pub fn audio_file(name: &str) -> bool {
+    let extension = name.rsplit('.').next().unwrap_or_default();
+    ["ogg", "oga", "opus", "mp3", "wav", "flac", "m4a", "aac"]
+        .iter()
+        .any(|candidate| extension.eq_ignore_ascii_case(candidate))
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Attachment {
     pub name: String,
