@@ -597,6 +597,7 @@ pub(super) fn message_row(message: &ChatMessage, revealed: &HashSet<String>) -> 
                     index: index as i32,
                     name: attachment.name.clone().into(),
                     detail: detail.into(),
+                    audio: yapfast_core::chat::audio_file(&attachment.name),
                 }
             })
             .collect()
