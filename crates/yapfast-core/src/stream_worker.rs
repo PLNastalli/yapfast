@@ -119,6 +119,8 @@ pub enum Job {
         height: u32,
         speakers: Option<String>,
         volume: f32,
+        #[serde(default)]
+        audio_only: bool,
     },
     /// Takes a picture of each screen in `screens`, by the ids [`shareable`]
     /// listed them with, scaled down to fit `width` by `height`, for the
@@ -423,6 +425,7 @@ fn serve(mut input: Box<dyn BufRead + Send>, report: &mut dyn FnMut(Report)) {
             height,
             speakers,
             volume,
+            audio_only,
         } => {
             let writer = Writer::open(&frames)?;
             report(Report::Ready);
@@ -434,6 +437,7 @@ fn serve(mut input: Box<dyn BufRead + Send>, report: &mut dyn FnMut(Report)) {
                 sound: true,
                 speakers,
                 volume,
+                audio_only,
             };
             crate::video_player::play(job, writer, received, &stop, report)
         }
@@ -1458,6 +1462,7 @@ impl Worker {
         (width, height): (u32, u32),
         speakers: Option<String>,
         volume: f32,
+        audio_only: bool,
     ) -> Result<(Self, Frames, mpsc::UnboundedReceiver<Report>)> {
         let frames = Frames::create(WATCH_WIDTH, WATCH_HEIGHT)?;
         let job = Job::Play {
@@ -1468,6 +1473,7 @@ impl Worker {
             height: height.min(WATCH_HEIGHT),
             speakers,
             volume,
+            audio_only,
         };
         let (worker, reports) = Self::start(&job)?;
         Ok((worker, frames, reports))
