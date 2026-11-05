@@ -1557,7 +1557,10 @@ impl OpenChannel {
                         Shown::Component(slot) => Placement::Component(slot),
                     },
                     spoiler: attachment.spoiler,
-                    video: attachment.video_url.is_some(),
+                    // Audio attachments have a playable URL but no poster; keep
+                    // them as file cards so they show the inline audio controls.
+                    video: attachment.video_url.is_some()
+                        && !crate::chat::audio_file(&attachment.name),
                     gif: super::gifs::favorite_gif(attachment),
                     url: Some(
                         attachment
