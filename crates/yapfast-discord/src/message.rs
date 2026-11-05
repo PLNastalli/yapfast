@@ -606,6 +606,12 @@ pub fn parse(value: &Value) -> Option<Message> {
             let video = kind.starts_with("video/");
             let url: Arc<str> = attachment["url"].as_str()?.into();
             let name = attachment["filename"].as_str()?;
+            // Voice messages arrive as audio/ogg (Opus), without a poster.
+            let extension = name.rsplit('.').next().unwrap_or_default();
+            let audio = kind.starts_with("audio/")
+                || ["ogg", "oga", "opus", "mp3", "wav", "flac", "m4a", "aac"]
+                    .iter()
+                    .any(|candidate| extension.eq_ignore_ascii_case(candidate));
             Some(Attachment {
                 name: name.into(),
                 size: attachment["size"].as_u64(),
@@ -622,7 +628,7 @@ pub fn parse(value: &Value) -> Option<Message> {
                 view_url: image
                     .then(|| scaled_url(attachment, VIEW_WIDTH, VIEW_HEIGHT, true))
                     .flatten(),
-                video_url: video.then(|| url.to_string()),
+                video_url: (video || audio).then(|| url.to_string()),
                 link_url: None,
                 animated: image && animated(attachment),
                 url,
