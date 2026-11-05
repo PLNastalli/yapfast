@@ -121,7 +121,8 @@ pub(super) fn found(
                 preview_failed: false,
                 placement: Placement::Message,
                 spoiler: attachment.spoiler,
-                video: attachment.video_url.is_some(),
+                video: attachment.video_url.is_some()
+                    && !crate::chat::audio_file(&attachment.name),
                 gif: super::gifs::favorite_gif(attachment),
                 url: Some(
                     attachment
