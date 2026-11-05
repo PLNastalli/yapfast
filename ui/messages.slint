@@ -352,7 +352,7 @@ component VideoCell inherits Rectangle {
 }
 
 /// A file, or an image without a preview, as a card.
-export struct FileCell { index: int, name: string, detail: string }
+export struct FileCell { index: int, name: string, detail: string, audio: bool }
 /// A block of a message's or card's text, as Discord's client lays them
 /// out: Markdown (0), a heading (1 to 3), subtext (4) or fenced code (5).
 /// Slint's Markdown draws none but the first. A `quoted` block is behind a
@@ -954,9 +954,11 @@ export component MessageStickers inherits HorizontalLayout {
 // A file, or an image without a preview, as a card with a way to save it.
 export component FileCard inherits HorizontalLayout {
     in property <FileCell> file;
+    in property <string> item;
     in property <bool> preview;
     /// The message's delivery state, empty once it's sent.
     in property <string> delivery;
+    property <bool> active: file.audio && VideoPlayer.item == root.item && VideoPlayer.index == file.index;
     callback save;
     padding-top: 4px;
     Rectangle {
@@ -969,6 +971,37 @@ export component FileCard inherits HorizontalLayout {
                 alignment: center; horizontal-stretch: 1;
                 Text { text: root.file.name; color: Theme.text; font-weight: 500; overflow: elide; }
                 if root.file.detail != "": Label { text: root.file.detail; }
+                if root.active: Label {
+                    text: VideoPlayer.error != "" ? VideoPlayer.error
+                        : VideoPlayer.loading ? "Loading audio..." : VideoPlayer.time;
+                }
+                if root.active && !VideoPlayer.loading && VideoPlayer.error == "": Rectangle {
+                    height: 4px;
+                    border-radius: 2px;
+                    background: Theme.edge;
+                    Rectangle {
+                        width: parent.width * clamp(VideoPlayer.progress, 0, 1);
+                        height: parent.height;
+                        border-radius: 2px;
+                        background: Theme.accent;
+                    }
+                    TouchArea {
+                        mouse-cursor: MouseCursor.pointer;
+                        clicked => { VideoPlayer.seek(clamp(self.mouse-x / self.width, 0, 1)); }
+                    }
+                }
+            }
+            if root.file.audio: IconButton {
+                icon: root.active && VideoPlayer.playing ? @image-url("icons/pause.svg") : @image-url("icons/play.svg");
+                label: root.active && VideoPlayer.playing ? "Pause audio" : "Play audio";
+                enabled: !root.preview && root.delivery == "";
+                clicked => {
+                    if (root.active && VideoPlayer.error == "") {
+                        VideoPlayer.toggle();
+                    } else {
+                        VideoPlayer.play(root.item, root.file.index, 320px, 80px);
+                    }
+                }
             }
             IconButton {
                 icon: @image-url("icons/download.svg"); label: "Save " + root.file.name;
@@ -1302,7 +1335,7 @@ export component CardView inherits HorizontalLayout {
                 }
                 // Only a media row has files.
                 for file in row.files: FileCard {
-                    file: file; preview: root.preview; delivery: root.delivery;
+                    file: file; item: root.item; preview: root.preview; delivery: root.delivery;
                     save => { root.save-attachment(root.item, file.index); }
                 }
                 // With the layout's spacing either side, a small gap is 16
@@ -1811,7 +1844,7 @@ export component MessageContent inherits VerticalLayout {
             }
             if message.stickers.length > 0: MessageStickers { stickers: message.stickers; }
             for file in message.files: FileCard {
-                file: file; preview: root.preview; delivery: message.delivery;
+                file: file; item: message.item; preview: root.preview; delivery: message.delivery;
                 save => { root.save-attachment(message.item, file.index); }
             }
             if message.hidden-card != "": Text {
