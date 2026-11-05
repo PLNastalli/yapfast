@@ -40,6 +40,7 @@ impl Playback {
         size: Option<u64>,
         frame: (u32, u32),
         speakers: Option<String>,
+        audio_only: bool,
         download: impl FnOnce(std::fs::File) -> F,
     ) -> Result<Self>
     where
@@ -63,7 +64,7 @@ impl Playback {
             let _ = done.send(size);
         });
         let (worker, frames, reports) =
-            Worker::play(path.to_path_buf(), size, frame, speakers, gain(&video)).inspect_err(
+            Worker::play(path.to_path_buf(), size, frame, speakers, gain(&video), audio_only).inspect_err(
                 |_| {
                     download.abort();
                 },
