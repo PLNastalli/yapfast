@@ -298,15 +298,15 @@ mod tests {
             &*steam.matches(&path.to_string_lossy()).unwrap().name,
             "Unknown Steam Game"
         );
-        assert!(
-            steam
-                .matches(
-                    &path
-                        .to_string_lossy()
-                        .replace("Fixture/game", "FixtureOther/game")
-                )
-                .is_none()
-        );
+        // Use platform-neutral path operations: Windows paths have backslashes.
+        let sibling = path
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("FixtureOther")
+            .join("game");
+        assert!(steam.matches(&sibling.to_string_lossy()).is_none());
         assert!(
             steam
                 .matches(

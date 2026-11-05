@@ -104,8 +104,18 @@ pub(super) async fn run(
             Err(error) => (error, None),
         };
         tracing::warn!(%error, "Discord connection ended");
-        let stopped = if error.downcast_ref::<Closed>().is_some_and(Closed::is_final) {
-            Some("Discord refused the saved login. Link your Discord account again.")
+        // Only 4004 means an invalid login. Other final Gateway codes may
+        // mean unsupported client settings, not an invalid credential.
+        let login_rejected = error
+            .downcast_ref::<Closed>()
+            .is_some_and(|closed| closed.code == 4004);
+        if login_rejected {
+            shared.api.reject_login();
+        }
+        let stopped = if login_rejected {
+            Some("Discord rejected the saved login. Complete any required verification in the official Discord app, then unlink and relink the account in Yapfast.")
+        } else if error.downcast_ref::<Closed>().is_some_and(Closed::is_final) {
+            Some("Discord rejected the connection. Check whether Yapfast needs an update.")
         } else if error.downcast_ref::<TooManyIdentifies>().is_some() {
             Some(
                 "Discord keeps ending the connection, so Yapfast stopped reconnecting. Restart Yapfast to try again.",

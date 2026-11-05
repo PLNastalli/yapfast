@@ -353,6 +353,12 @@ impl Api {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
+    /// Discord's Gateway rejected the saved login (4004). Stop HTTP calls
+    /// which would otherwise keep using the same rejected credential.
+    pub(crate) fn reject_login(&self) {
+        self.refusals.unauthorized();
+    }
+
     /// Asks with `token` from now on: Discord refreshed the login to it.
     pub fn relogin(&self, token: &str) {
         *self
@@ -2612,6 +2618,14 @@ mod tests {
             assert!(error.is::<super::Stalled>(), "{error:#}");
             assert!(super::may_work_later(&error));
         }
+    }
+
+    #[test]
+    fn gateway_rejection_stops_http_requests() {
+        let api = super::Api::new("test-only".into()).unwrap();
+        assert_eq!(api.refusals.check(), Ok(()));
+        api.reject_login();
+        assert_eq!(api.refusals.check(), Err(super::Stopped::Unauthorized));
     }
 
     #[test]
