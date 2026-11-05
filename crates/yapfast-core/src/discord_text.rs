@@ -291,10 +291,16 @@ impl Chat {
             .as_ref()
             .filter(|channel| channel.room == video.room)
             .and_then(|channel| channel.attachment(&video.item, index))
-            .and_then(|attachment| Some((attachment.video_url.clone()?, attachment.size)));
-        let Some((url, size)) = found else {
+            .and_then(|attachment| {
+                Some((
+                    attachment.video_url.clone()?,
+                    attachment.size,
+                    crate::chat::audio_file(&attachment.name),
+                ))
+            });
+        let Some((url, size, audio_only)) = found else {
             video.loading = false;
-            video.error = Some("This video is no longer available.".into());
+            video.error = Some("This attachment is no longer available.".into());
             let _ = events.send(Event::Video(Some(video)));
             return;
         };
@@ -312,6 +318,7 @@ impl Chat {
             size,
             frame,
             speakers,
+            audio_only,
             download,
         ) {
             Ok(playback) => {
