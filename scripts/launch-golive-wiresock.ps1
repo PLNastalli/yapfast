@@ -6,6 +6,7 @@ param(
     [string] $WireGuardConfig,
     [string] $YapfastExe,
     [string] $WireSockExe,
+    [switch] $MediaOnly,
     [switch] $CheckOnly
 )
 
@@ -76,21 +77,39 @@ foreach ($header in [regex]::Matches($original, '(?im)^[ \t]*\[([^\]\r\n]+)\][ \
     }
 }
 
-# Same executable hosts the main app and --stream-worker, so both use the
-# route. Discard any previous app filters. Removing DNS avoids a system-wide
-# DNS change. Existing WireGuard keys remain only in the temporary profile.
+# A separate sibling copy runs --stream-worker when -MediaOnly is selected.
+# This lets WireSock match only the media worker by executable path, without
+# changing the main Yapfast app's messages or voice traffic. Removing DNS
+# avoids changing Windows' system-wide resolver.
 $lines = New-Object 'System.Collections.Generic.List[string]'
 foreach ($line in ($original -split '\r?\n')) {
     if ($line -match '(?i)^[ \t]*(?:#@ws:)?(?:AllowedApps|DisallowedApps|DNS)[ \t]*=') { continue }
     $lines.Add($line)
 }
-$lines.Add("#@ws:AllowedApps = $yapfast")
+$workerExecutable = $null
+$previousWorker = [Environment]::GetEnvironmentVariable('YAPFAST_STREAM_WORKER', 'Process')
+$vpnExecutable = $yapfast
+if ($MediaOnly) {
+    # Keep the copy next to the installed executable so native DLL lookup and
+    # Windows resource paths remain unchanged. The GUID prevents overwriting.
+    $workerExecutable = Join-Path (Split-Path -Path $yapfast -Parent) (
+        'yapfast-golive-media-' + [guid]::NewGuid().ToString('N') + '.exe'
+    )
+    $vpnExecutable = $workerExecutable
+}
+$lines.Add("#@ws:AllowedApps = $vpnExecutable")
 $filteredProfile = $lines -join [Environment]::NewLine
 
 Write-Host 'Yapfast official Go Live via WireSock'
 Write-Host "  Yapfast: $yapfast"
 Write-Host "  WireSock: $wiresock"
-Write-Host '  Routing: only Yapfast (main process and stream worker).'
+if ($MediaOnly) {
+    Write-Host '  Routing: media worker only (screen shares, viewing streams and media jobs).'
+    Write-Host '  Messaging, voice and the Discord gateway stay on the normal connection.'
+    Write-Warning 'The Discord server may still restrict Go Live based on the direct gateway session.'
+} else {
+    Write-Host '  Routing: all Yapfast connections (main process and media worker).'
+}
 Write-Host '  Network lock: disabled. System-wide DNS: unchanged.'
 if ($CheckOnly) {
     Write-Host 'Profile validation succeeded. Nothing was launched.'
@@ -116,6 +135,11 @@ $temporaryProfile = Join-Path $folder ('wiresock-' + [guid]::NewGuid().ToString(
 $vpnProcess = $null
 $appProcess = $null
 try {
+    if ($MediaOnly) {
+        Copy-Item -LiteralPath $yapfast -Destination $workerExecutable -ErrorAction Stop
+        # The installed Yapfast already uses this override to start stream workers.
+        $env:YAPFAST_STREAM_WORKER = $workerExecutable
+    }
     [System.IO.File]::WriteAllText($temporaryProfile, $filteredProfile, ([System.Text.UTF8Encoding]::new($false)))
     # WireGuard private keys should not be readable by other local users.
     $acl = Get-Acl -LiteralPath $temporaryProfile
@@ -140,7 +164,11 @@ try {
         throw 'WireSock stopped during startup. Check its driver, profile and permissions.'
     }
 
-    Write-Host 'Starting Yapfast (with the Discord gateway inside the tunnel)...'
+    if ($MediaOnly) {
+        Write-Host 'Starting Yapfast with normal gateway/voice routing and VPN media worker...'
+    } else {
+        Write-Host 'Starting Yapfast (with the Discord gateway inside the tunnel)...'
+    }
     $appProcess = Start-Process -FilePath $yapfast -WorkingDirectory (Split-Path -Path $yapfast -Parent) -PassThru
     while ($true) {
         Start-Sleep -Seconds 1
@@ -168,6 +196,19 @@ finally {
     }
     if (Test-Path -LiteralPath $temporaryProfile) {
         Remove-Item -LiteralPath $temporaryProfile -Force -ErrorAction SilentlyContinue
+    }
+    if ($MediaOnly) {
+        if ($null -eq $previousWorker) {
+            Remove-Item Env:YAPFAST_STREAM_WORKER -ErrorAction SilentlyContinue
+        } else {
+            $env:YAPFAST_STREAM_WORKER = $previousWorker
+        }
+        if ($workerExecutable -and (Test-Path -LiteralPath $workerExecutable)) {
+            # The app normally terminates its workers before it closes.
+            # Never delete an executable still being used by another process.
+            try { Remove-Item -LiteralPath $workerExecutable -Force -ErrorAction Stop }
+            catch { Write-Warning "Remove the temporary worker copy when Yapfast exits: $workerExecutable" }
+        }
     }
     Write-Host 'The managed WireSock session was stopped.'
 }
