@@ -74,12 +74,16 @@ if (-not (Test-Path -LiteralPath $wscript -PathType Leaf)) {
 }
 $arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -WireGuardConfig "{1}" -YapfastExe "{2}" -MediaOnly' -f $script, $config, $app
 $command = '"' + $hostExe + '" ' + $arguments
+$errorLog = Join-Path $env:LOCALAPPDATA 'Yapfast\GoLiveTunnel\last-error.log'
 $vbs = @(
     'Option Explicit'
-    'Dim shell, command'
+    'Dim shell, command, exitCode'
     'Set shell = CreateObject("WScript.Shell")'
     ('command = "' + $command.Replace('"', '""') + '"')
-    'shell.Run command, 0, False'
+    'exitCode = shell.Run(command, 0, True)'
+    'If exitCode <> 0 Then'
+    ('  shell.Popup "Yapfast GoLive nao iniciou. A VPN pode ter falhado." & vbCrLf & "Consulte: ' + $errorLog.Replace('"', '""') + '", 0, "Yapfast GoLive", 16')
+    'End If'
 ) -join [Environment]::NewLine
 # VBScript reads UTF-16LE with BOM, including Windows paths with accents.
 [System.IO.File]::WriteAllText($hiddenScript, $vbs, [System.Text.Encoding]::Unicode)
