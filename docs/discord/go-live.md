@@ -1,5 +1,10 @@
 # Go Live
 
+For Windows users who need a per-app WireGuard route for Discord's official
+Go Live, see the optional [WireSock launcher](go-live-wiresock-windows.md).
+This is network routing, not a replacement stream service, and does not
+guarantee Discord will allow a stream.
+
 Sharing a screen or window with its sound on Discord, and watching others'
 streams. The rest of Discord is in [the Discord docs](README.md).
 

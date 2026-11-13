@@ -191,6 +191,11 @@ pub fn run(
     }
     prepare(&window);
     let adapter = Adapter::new(Arc::new(runtime), root, &window)?;
+    #[cfg(all(windows, feature = "discord"))]
+    {
+        window.set_golive_vpn(crate::golive::enabled(&adapter.borrow().root));
+        window.set_golive_profile(crate::golive::profile_display(&adapter.borrow().root).into());
+    }
     bind_callbacks(&window, &adapter);
     updates::start(&adapter, &window);
     new_tags::start(&adapter);
@@ -281,6 +286,7 @@ fn prepare(window: &YapfastWindow) {
     let autostart = AUTOSTART.get();
     window.set_autostart_available(autostart);
     window.set_start_on_sign_in(autostart && autostart::enabled());
+    window.set_golive_vpn_available(cfg!(all(windows, feature = "discord")));
     // Without Matrix everything is Discord's, so its badge would say nothing.
     window
         .global::<Badges>()

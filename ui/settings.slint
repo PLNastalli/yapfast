@@ -1329,6 +1329,10 @@ export component AdvancedSettings inherits VerticalLayout {
     in-out property <bool> developer-mode;
     in-out property <bool> start-on-sign-in;
     in property <bool> autostart-available;
+    in-out property <bool> golive-vpn;
+    in property <bool> golive-vpn-available;
+    in property <string> golive-profile;
+    callback choose-golive-profile;
     in-out property <bool> discord-links;
     in property <bool> discord-links-available;
     callback preferences-changed;
@@ -1377,6 +1381,31 @@ export component AdvancedSettings inherits VerticalLayout {
         ActionButton {
             text: "Restart Yapfast"; icon: @image-url("icons/refresh-cw.svg");
             clicked => { root.restart(); }
+        }
+    }
+    if root.golive-vpn-available: VerticalLayout {
+        spacing: 8px;
+        SettingsSwitch {
+            text: "Go Live over WireSock (media only)";
+            description: "Optional VPN for sharing and watching streams. Messages, calls and Discord gateway stay on your regular connection. Requires WireSock CLI and a WireGuard profile. Restart Yapfast to apply. Regional Go Live access is not guaranteed.";
+            checked <=> root.golive-vpn;
+            toggled => { root.preferences-changed(); }
+        }
+        Label {
+            text: "WireGuard profile: " + root.golive-profile;
+            font-size: 12px; color: Theme.muted;
+        }
+        HorizontalLayout {
+            spacing: 10px;
+            ActionButton {
+                text: "Choose WireGuard .conf";
+                clicked => { root.choose-golive-profile(); }
+            }
+            ActionButton {
+                text: "Restart to apply";
+                icon: @image-url("icons/refresh-cw.svg");
+                clicked => { root.restart(); }
+            }
         }
     }
     SettingsSwitch {
