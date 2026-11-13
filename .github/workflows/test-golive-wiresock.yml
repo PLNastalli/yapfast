@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "scripts/launch-golive-wiresock.ps1"
+      - "scripts/install-golive-default-shortcut.ps1"
       - ".github/workflows/test-golive-wiresock.yml"
   workflow_dispatch:
 
@@ -19,6 +20,8 @@ jobs:
           $tokens = $null
           $errors = $null
           [System.Management.Automation.Language.Parser]::ParseFile($script, [ref]$tokens, [ref]$errors) | Out-Null
+          $shortcutScript = Join-Path $env:GITHUB_WORKSPACE 'scripts\install-golive-default-shortcut.ps1'
+          [System.Management.Automation.Language.Parser]::ParseFile($shortcutScript, [ref]$tokens, [ref]$errors) | Out-Null
           if ($errors.Count -ne 0) {
             $errors | ForEach-Object { Write-Error $_.Message }
             throw 'PowerShell syntax check failed.'
