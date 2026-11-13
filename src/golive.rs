@@ -166,7 +166,7 @@ fn filter_profile(source: &str, worker: &Path) -> Result<String> {
     if !interface || peers != 1 || !route {
         bail!("WireGuard needs [Interface], exactly one [Peer], and AllowedIPs = 0.0.0.0/0");
     }
-    let mut filtered = Vec::new();
+    let mut filtered: Vec<String> = Vec::new();
     for line in source.lines() {
         let key = line.trim_start().split_once('=').map(|(key, _)| key.trim());
         if key.is_some_and(|key| {
@@ -175,10 +175,10 @@ fn filter_profile(source: &str, worker: &Path) -> Result<String> {
         }) {
             continue;
         }
-        filtered.push(line);
+        filtered.push(line.to_owned());
     }
     // WireSock's own per-process rule; the gateway and calls stay direct.
-    filtered.push(&format!("#@ws:AllowedApps = {}", worker.display()));
+    filtered.push(format!("#@ws:AllowedApps = {}", worker.display()));
     Ok(filtered.join("\r\n") + "\r\n")
 }
 
