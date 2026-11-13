@@ -117,7 +117,7 @@ jobs:
               throw 'The hidden launcher was not created.'
             }
             $hiddenContent = Get-Content -LiteralPath $hiddenScript -Raw
-            if ($hiddenContent -notmatch 'MediaOnly' -or $hiddenContent -notmatch 'vpn.conf' -or $hiddenContent -notmatch 'WindowStyle Hidden' -or $hiddenContent -notmatch 'exitCode = shell.Run' -or $hiddenContent -notmatch 'shell.Popup') {
+            if ($hiddenContent -notmatch 'MediaOnly' -or $hiddenContent -notmatch 'vpn.conf' -or $hiddenContent -notmatch 'WindowStyle Hidden' -or $hiddenContent -notmatch 'exitCode = shell.Run' -or $hiddenContent -notmatch 'shell.Popup' -or $hiddenContent -notmatch 'ShellExecute' -or $hiddenContent -notmatch '"runas"') {
               throw 'Hidden launcher did not preserve the media-only mode and VPN path.'
             }
           } finally {
