@@ -54,7 +54,7 @@ if (-not (Test-Path -LiteralPath $hostExe)) {
 
 # The shortcut invokes the already-installed, tested launcher; it does not
 # embed WireGuard private keys or duplicate the user's configuration.
-$arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Minimized -File "{0}" -WireGuardConfig "{1}" -MediaOnly' -f $script, $config
+$arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Minimized -File "{0}" -WireGuardConfig "{1}" -YapfastExe "{2}" -MediaOnly' -f $script, $config, $app
 $shell = New-Object -ComObject WScript.Shell
 function Save-Shortcut([string] $destination) {
     $link = $shell.CreateShortcut($destination)
