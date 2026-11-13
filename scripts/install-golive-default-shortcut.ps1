@@ -79,6 +79,16 @@ $vbs = @(
     'Option Explicit'
     'Dim shell, command, exitCode'
     'Set shell = CreateObject("WScript.Shell")'
+    # WireSock packet filtering may require elevation. The visible UAC prompt
+    # authorizes the tunnel; the elevated second launch stays console-free.
+    'If WScript.Arguments.Count = 0 Then'
+    '  On Error Resume Next'
+    '  CreateObject("Shell.Application").ShellExecute WScript.FullName, "//B //Nologo """ & WScript.ScriptFullName & """ elevated", "", "runas", 0'
+    '  If Err.Number <> 0 Then'
+    '    shell.Popup "Permissao de administrador necessaria para WireSock." & vbCrLf & Err.Description, 0, "Yapfast GoLive", 16'
+    '  End If'
+    '  WScript.Quit 0'
+    'End If'
     ('command = "' + $command.Replace('"', '""') + '"')
     'exitCode = shell.Run(command, 0, True)'
     'If exitCode <> 0 Then'
