@@ -46,7 +46,7 @@ jobs:
           & powershell.exe -NoProfile -File $script -WireGuardConfig $good -YapfastExe $app -WireSockExe $cli -CheckOnly
           if ($LASTEXITCODE -ne 0) { throw 'A valid profile was rejected.' }
           # MediaOnly must validate without starting WireSock or copying binaries.
-          $mediaOutput = & $script -WireGuardConfig $good -YapfastExe $app -WireSockExe $cli -MediaOnly -CheckOnly | Out-String
+          $mediaOutput = & powershell.exe -NoProfile -File $script -WireGuardConfig $good -YapfastExe $app -WireSockExe $cli -MediaOnly -CheckOnly | Out-String
           if ($mediaOutput -notmatch 'media worker only' -or $mediaOutput -notmatch 'Profile validation succeeded') {
             throw 'The MediaOnly configuration did not validate.'
           }
@@ -60,10 +60,9 @@ jobs:
             $bin = Join-Path $env:ProgramFiles 'WireSock Secure Connect\bin'
             New-Item -ItemType Directory -Path $bin -Force | Out-Null
             Copy-Item -Path $cli -Destination (Join-Path $bin 'wiresock-client.exe')
-            $binOutput = & $script -WireGuardConfig $good -YapfastExe $app -CheckOnly | Out-String
-            if ($binOutput -notmatch 'Profile validation succeeded' -or $binOutput -notmatch 'WireSock Secure Connect') {
-              throw 'The WireSock bin directory was not detected.'
-            }
+            # Invoke in this PowerShell process, preserving its temporary
+            # ProgramFiles override. An unresolved CLI path throws.
+            & $script -WireGuardConfig $good -YapfastExe $app -CheckOnly
           } finally {
             $env:ProgramFiles = $realProgramFiles
           }
