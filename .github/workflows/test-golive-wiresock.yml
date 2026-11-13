@@ -1,0 +1,53 @@
+name: Windows Go Live WireSock launcher
+
+on:
+  pull_request:
+    paths:
+      - "scripts/launch-golive-wiresock.ps1"
+      - ".github/workflows/test-golive-wiresock.yml"
+  workflow_dispatch:
+
+jobs:
+  validate-launcher:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse in Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $script = Join-Path $env:GITHUB_WORKSPACE 'scripts\launch-golive-wiresock.ps1'
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile($script, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -ne 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            throw 'PowerShell syntax check failed.'
+          }
+      - name: Validate positive and negative profiles without connecting
+        shell: powershell
+        run: |
+          $folder = Join-Path $env:RUNNER_TEMP 'golive-wiresock-tests'
+          New-Item -Path $folder -ItemType Directory -Force | Out-Null
+          $app = Join-Path $folder 'yapfast.exe'
+          $cli = Join-Path $folder 'wiresock-client.exe'
+          New-Item -Path $app, $cli -ItemType File -Force | Out-Null
+          $script = Join-Path $env:GITHUB_WORKSPACE 'scripts\launch-golive-wiresock.ps1'
+          $good = Join-Path $folder 'full-tunnel.conf'
+          @(
+            '[Interface]',
+            'PrivateKey = test-only',
+            'Address = 10.55.0.2/32',
+            'DNS = 1.1.1.1',
+            '[Peer]',
+            'PublicKey = test-only',
+            'AllowedIPs = 0.0.0.0/0, ::/0',
+            'Endpoint = 203.0.113.1:51820'
+          ) | Set-Content -Path $good -Encoding Ascii
+          & powershell.exe -NoProfile -File $script -WireGuardConfig $good -YapfastExe $app -WireSockExe $cli -CheckOnly
+          if ($LASTEXITCODE -ne 0) { throw 'A valid profile was rejected.' }
+
+          $bad = Join-Path $folder 'not-full-tunnel.conf'
+          (Get-Content -Path $good) -replace '0.0.0.0/0, ::/0', '10.0.0.0/8' |
+            Set-Content -Path $bad -Encoding Ascii
+          & powershell.exe -NoProfile -File $script -WireGuardConfig $bad -YapfastExe $app -WireSockExe $cli -CheckOnly 2>&1 | Out-Null
+          if ($LASTEXITCODE -eq 0) { throw 'A profile without a default route was accepted.' }
