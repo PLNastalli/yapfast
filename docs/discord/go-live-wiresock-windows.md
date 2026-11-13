@@ -7,9 +7,12 @@ through an external WireGuard exit before opening Discord's gateway.
 This still uses Discord's **official** Go Live and stream service, not an
 alternative video service.
 
-The optional launcher in [scripts/launch-golive-wiresock.ps1](../../scripts/launch-golive-wiresock.ps1)
-does this on Windows. It was designed with the 2026 Brazilian Go Live
-restrictions in mind, but is **not a guaranteed workaround**. Discord can
+The native Windows Go Live integration is implemented in
+[src/golive.rs](../../src/golive.rs), with its settings in **Settings >
+Advanced**. The older PowerShell-based launcher remains available
+for pre-existing builds that do not include the native feature.
+This was designed with the 2026 Brazilian Go Live restrictions in mind,
+but is **not a guaranteed workaround**. Discord can
 change how it determines eligibility and can reject streams even with a
 working VPN. Check Discord's terms and applicable rules before using it.
 
@@ -25,7 +28,39 @@ working VPN. Check Discord's terms and applicable rules before using it.
 
 **Do not share your WireGuard .conf**: it contains a private key.
 
-## Usage
+## Native integration (new Windows builds)
+
+Build Yapfast from this feature branch; an already-installed stable or nightly
+binary will **not** gain the new setting until replaced with a rebuilt binary.
+
+1. In **Settings > Advanced**, click **Choose WireGuard .conf** and select
+   your own profile. If you do not select one, Yapfast looks for the old
+   `%USERPROFILE%\Downloads\YapFast-GoLive\vpn.conf`.
+2. Turn on **Go Live over WireSock (media only)**.
+3. Click **Restart to apply**. Windows will show a UAC administrator prompt
+   for the *dedicated VPN helper*, not the main Yapfast UI.
+4. Allow the UAC request. The Rust helper starts WireSock without a console;
+   Yapfast's main window remains unelevated.
+
+This feature is **off by default**. The app isolates only its stream worker
+with the WireSock `#@ws:AllowedApps` rule, so messages, voice and the gateway
+remain on the regular connection. It uses its own native Rust process manager
+and does not require `start.ps1`, `setup.ps1`, VBS or custom shortcuts.
+
+The media worker copy lives briefly beside `yapfast.exe`, so that directory
+must be writable by your user. The helper manages WireSock and watches the
+normal Yapfast process; it stops WireSock when Yapfast exits.
+
+If an invalid VPN profile, missing WireSock driver or denied UAC prevents
+startup, Yapfast displays an error instead of silently routing media directly.
+To open the UI and disable this option after a failure, start
+`yapfast.exe --no-golive`. This bypass lasts for that launch only.
+
+**Regional limitations:** WireSock is a transport tool, not a VPN provider.
+You still need a valid WireGuard server. Discord may reject Go Live based
+on the gateway session, which the media-only VPN leaves unchanged.
+
+### Legacy PowerShell integration
 
 From the repository directory in PowerShell:
 
@@ -55,9 +90,8 @@ To remove the custom shortcuts and restore the backed-up Start Menu icon:
 
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File '.\scripts\install-golive-default-shortcut.ps1' -Remove
 
-This is a **Windows shortcut integration**, not yet a toggle inside Yapfast's
-Advanced settings. A native toggle would require changing and rebuilding
-Yapfast itself.
+This shortcut is for **older Yapfast builds**; the native option in
+Settings > Advanced replaces it after the updated Rust code is compiled.
 
 ### Tunnel only the media worker
 
@@ -133,9 +167,10 @@ the client to run. A running process **does not prove** the VPN has
 handshaken or that the exit is outside Brazil. Verify the actual route
 before relying on it.
 
-**Testing status:** Config generation and script syntax can be checked
-without credentials; an end-to-end Discord Go Live test from Brazil has
-not been performed. The Discord server ultimately decides whether the
+**Testing status:** The Rust changes have not been validated end-to-end
+on a Windows machine with a working VPN, and a new Windows binary must be
+compiled before the native settings can be used. The legacy script tests
+validate profile generation and PowerShell syntax, not Discord eligibility. The Discord server ultimately decides whether the
 official stream is available.
 
 ## References
