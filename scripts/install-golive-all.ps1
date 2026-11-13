@@ -136,17 +136,33 @@ if (-not (Test-Path -LiteralPath $vpnConfig -PathType Leaf)) {
     }
 }
 
+# On reruns with -SkipAppInstall, recover the already-extracted portable
+# build rather than falling back to an older stable Yapfast installation.
+if ($SkipAppInstall) {
+    $portableRoot = Join-Path $dir 'YapfastPortable'
+    if (Test-Path -LiteralPath $portableRoot -PathType Container) {
+        $portableExe = @(Get-ChildItem -LiteralPath $portableRoot -Filter 'yapfast.exe' -File -Recurse |
+            Sort-Object -Property LastWriteTimeUtc -Descending |
+            Select-Object -First 1)
+        if ($portableExe.Count -eq 1) {
+            $app = $portableExe[0].FullName
+            Write-Host "Using existing portable Yapfast: $app"
+        }
+    }
+}
+
 if (-not (Test-Path -LiteralPath $app -PathType Leaf)) {
-    Write-Warning 'Yapfast is not installed at the standard path. Install it, then run setup.ps1 with -YapfastExe if your install path differs.'
-} elseif (-not (Test-Path -LiteralPath $vpnConfig -PathType Leaf)) {
-    Write-Host ''
-    Write-Host "Download complete. Place your own WireGuard config at $vpnConfig"
-    Write-Host "Then run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File ""$shortcutInstaller"" -Launcher ""$launcher"" -WireGuardConfig ""$vpnConfig"" -YapfastExe ""$app"" -ReplaceStartMenuShortcut"
+    Write-Warning "No Yapfast executable found. Install Yapfast or rerun without -SkipAppInstall."
 } else {
-    Write-Host 'Creating the default Yapfast GoLive shortcut...'
+    # Create shortcuts whether vpn.conf exists yet or not. The shortcut
+    # launcher validates the config when clicked.
+    Write-Host 'Creating the Yapfast GoLive shortcut...'
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $shortcutInstaller -Launcher $launcher -WireGuardConfig $vpnConfig -YapfastExe $app -ReplaceStartMenuShortcut
     if ($LASTEXITCODE -ne 0) {
         throw 'Shortcut setup failed. Check the paths and permissions printed above.'
+    }
+    if (-not (Test-Path -LiteralPath $vpnConfig -PathType Leaf)) {
+        Write-Host "To use the new shortcut, place your own WireGuard profile here: $vpnConfig"
     }
 }
 Write-Host ''
