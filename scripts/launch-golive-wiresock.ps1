@@ -179,7 +179,7 @@ try {
         # Keep the full diagnostics in the per-user folder for manual review.
         # Never print a WireGuard private key if one appears unexpectedly.
         $summary = (($details | Select-Object -Last 12) -join [Environment]::NewLine)
-        $summary = [regex]::Replace($summary, '(?im)^\\s*(PrivateKey|PresharedKey)\\s*=[^\\r\\n]+', '$1 = [REDACTED]')
+        $summary = [regex]::Replace($summary, '(?im)^\s*(PrivateKey|PresharedKey)\s*=[^\r\n]+', '$1 = [REDACTED]')
         if (-not $summary) { $summary = 'No diagnostic output was produced.' }
         throw "WireSock stopped during startup (exit $($vpnProcess.ExitCode)).$([Environment]::NewLine)$summary$([Environment]::NewLine)Diagnostic files: $vpnStdout / $vpnStderr"
     }
