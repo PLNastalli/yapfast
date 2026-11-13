@@ -21,6 +21,9 @@ $shortcuts = @(
 )
 $original = Join-Path $menu 'Yapfast.lnk'
 $backup = Join-Path $menu 'Yapfast.before-golive.lnk'
+# Windows Script Host launches the existing PowerShell script without showing
+# a console window. Unlike -WindowStyle Minimized, this is actually hidden.
+$hiddenScript = Join-Path (Split-Path -Path $Launcher -Parent) 'launch-golive-hidden.vbs'
 
 if ($Remove) {
     foreach ($link in $shortcuts) {
@@ -34,6 +37,9 @@ if ($Remove) {
         }
         Move-Item -LiteralPath $backup -Destination $original
         Write-Host 'Restored the original Start Menu shortcut.'
+    }
+    if (Test-Path -LiteralPath $hiddenScript -PathType Leaf) {
+        Remove-Item -LiteralPath $hiddenScript -Force
     }
     Write-Host 'Removed the Yapfast GoLive shortcuts. WireSock and Yapfast are unchanged.'
     return
@@ -59,17 +65,33 @@ if (-not (Test-Path -LiteralPath $hostExe)) {
     throw 'Windows PowerShell was not found.'
 }
 
-# The shortcut invokes the already-installed, tested launcher; it does not
-# embed WireGuard private keys or duplicate the user's configuration.
-$arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Minimized -File "{0}" -WireGuardConfig "{1}" -YapfastExe "{2}" -MediaOnly' -f $script, $config, $app
+# The shortcut launches a tiny local VBScript using wscript.exe, which
+# starts PowerShell completely hidden. No WireGuard keys are written here,
+# only executable/script paths and the location of the profile.
+$wscript = Join-Path $env:WINDIR 'System32\wscript.exe'
+if (-not (Test-Path -LiteralPath $wscript -PathType Leaf)) {
+    throw 'Windows Script Host (wscript.exe) is not available.'
+}
+$arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -WireGuardConfig "{1}" -YapfastExe "{2}" -MediaOnly' -f $script, $config, $app
+$command = '"' + $hostExe + '" ' + $arguments
+$vbs = @(
+    'Option Explicit'
+    'Dim shell, command'
+    'Set shell = CreateObject("WScript.Shell")'
+    ('command = "' + $command.Replace('"', '""') + '"')
+    'shell.Run command, 0, False'
+) -join [Environment]::NewLine
+# VBScript reads UTF-16LE with BOM, including Windows paths with accents.
+[System.IO.File]::WriteAllText($hiddenScript, $vbs, [System.Text.Encoding]::Unicode)
+
 $shell = New-Object -ComObject WScript.Shell
 function Save-Shortcut([string] $destination) {
     $link = $shell.CreateShortcut($destination)
-    $link.TargetPath = $hostExe
-    $link.Arguments = $arguments
+    $link.TargetPath = $wscript
+    $link.Arguments = ('//B //Nologo "{0}"' -f $hiddenScript)
     $link.WorkingDirectory = Split-Path -Path $script -Parent
     $link.IconLocation = "$app,0"
-    $link.WindowStyle = 7
+    $link.WindowStyle = 1
     $link.Description = 'Yapfast with a VPN route for the Go Live media worker only'
     $link.Save()
 }
