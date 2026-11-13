@@ -134,6 +134,10 @@ New-Item -ItemType Directory -Path $folder -Force | Out-Null
 $temporaryProfile = Join-Path $folder ('wiresock-' + [guid]::NewGuid().ToString('N') + '.conf')
 $vpnProcess = $null
 $appProcess = $null
+# Store the CLI's startup diagnostics even when the shortcut hides its window.
+# Keep these per-run files private alongside the temporary WireGuard profile.
+$vpnStdout = Join-Path $folder ('wiresock-' + [guid]::NewGuid().ToString('N') + '.out.log')
+$vpnStderr = Join-Path $folder ('wiresock-' + [guid]::NewGuid().ToString('N') + '.err.log')
 try {
     if ($MediaOnly) {
         Copy-Item -LiteralPath $yapfast -Destination $workerExecutable -ErrorAction Stop
@@ -154,14 +158,30 @@ try {
         ))
     }
     Set-Acl -LiteralPath $temporaryProfile -AclObject $acl
+    foreach ($log in @($vpnStdout, $vpnStderr)) {
+        New-Item -ItemType File -Path $log -Force | Out-Null
+        Set-Acl -LiteralPath $log -AclObject $acl
+    }
 
     Write-Host 'Starting the VPN before opening Yapfast...'
     $arguments = @('run', '-config', ('"' + $temporaryProfile + '"'), '-log-level', 'error', '-network-lock', 'disabled')
-    $vpnProcess = Start-Process -FilePath $wiresock -ArgumentList $arguments -WorkingDirectory (Split-Path -Path $wiresock -Parent) -WindowStyle Hidden -PassThru
+    $vpnProcess = Start-Process -FilePath $wiresock -ArgumentList $arguments -WorkingDirectory (Split-Path -Path $wiresock -Parent) -WindowStyle Hidden -RedirectStandardOutput $vpnStdout -RedirectStandardError $vpnStderr -PassThru
     Start-Sleep -Seconds 3
     $vpnProcess.Refresh()
     if ($vpnProcess.HasExited) {
-        throw 'WireSock stopped during startup. Check its driver, profile and permissions.'
+        $details = @(
+            foreach ($log in @($vpnStdout, $vpnStderr)) {
+                if (Test-Path -LiteralPath $log -PathType Leaf) {
+                    Get-Content -LiteralPath $log -Tail 15 -ErrorAction SilentlyContinue
+                }
+            }
+        ) | Where-Object { $_ -and $_.Trim() }
+        # Keep the full diagnostics in the per-user folder for manual review.
+        # Never print a WireGuard private key if one appears unexpectedly.
+        $summary = (($details | Select-Object -Last 12) -join [Environment]::NewLine)
+        $summary = [regex]::Replace($summary, '(?im)^\\s*(PrivateKey|PresharedKey)\\s*=[^\\r\\n]+', '$1 = [REDACTED]')
+        if (-not $summary) { $summary = 'No diagnostic output was produced.' }
+        throw "WireSock stopped during startup (exit $($vpnProcess.ExitCode)).$([Environment]::NewLine)$summary$([Environment]::NewLine)Diagnostic files: $vpnStdout / $vpnStderr"
     }
 
     if ($MediaOnly) {
@@ -176,7 +196,7 @@ try {
         $vpnProcess.Refresh()
         if ($appProcess.HasExited) { break }
         if ($vpnProcess.HasExited) {
-            throw 'WireSock stopped unexpectedly. Closing Yapfast to avoid a silent direct reconnect.'
+            throw "WireSock stopped unexpectedly (exit $($vpnProcess.ExitCode)). Diagnostics: $vpnStdout / $vpnStderr. Closing Yapfast to avoid a silent direct reconnect."
         }
     }
 }
@@ -210,5 +230,7 @@ finally {
             catch { Write-Warning "Remove the temporary worker copy when Yapfast exits: $workerExecutable" }
         }
     }
+    # Output logs intentionally remain for troubleshooting hidden-launch failures.
+    # Remove them manually after debugging (they can include IPs and process names).
     Write-Host 'The managed WireSock session was stopped.'
 }
