@@ -35,6 +35,30 @@ From the repository directory in PowerShell:
     # Start WireSock, then Yapfast; keep the terminal open:
     .\scripts\launch-golive-wiresock.ps1 -WireGuardConfig 'C:\VPN\profile.conf'
 
+### Make media-only the default shortcut on Windows
+
+If you don't want to run PowerShell every time, install a normal Start
+Menu/Desktop shortcut once, using
+[scripts/install-golive-default-shortcut.ps1](../../scripts/install-golive-default-shortcut.ps1).
+This uses the existing `-MediaOnly` launcher behind the icon; it doesn't
+change the installed app's source code or need a Rust rebuild. Keep the
+`start.ps1` and `vpn.conf` in the location used when installing the shortcut.
+
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File '.\scripts\install-golive-default-shortcut.ps1'
+
+After that, start **Yapfast GoLive** like any normal desktop app. To
+make the existing Start Menu **Yapfast** icon use the same route, opt in with
+`-ReplaceStartMenuShortcut`, which keeps a backup. Pinned taskbar shortcuts
+might need to be pinned again.
+
+To remove the custom shortcuts and restore the backed-up Start Menu icon:
+
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File '.\scripts\install-golive-default-shortcut.ps1' -Remove
+
+This is a **Windows shortcut integration**, not yet a toggle inside Yapfast's
+Advanced settings. A native toggle would require changing and rebuilding
+Yapfast itself.
+
 ### Tunnel only the media worker
 
 Add `-MediaOnly` to the command to tunnel only the stream worker
