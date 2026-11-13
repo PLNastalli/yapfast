@@ -35,6 +35,31 @@ From the repository directory in PowerShell:
     # Start WireSock, then Yapfast; keep the terminal open:
     .\scripts\launch-golive-wiresock.ps1 -WireGuardConfig 'C:\VPN\profile.conf'
 
+### Tunnel only the media worker
+
+Add `-MediaOnly` to the command to tunnel only the stream worker
+instead of the whole Yapfast app:
+
+    .\scripts\launch-golive-wiresock.ps1 -WireGuardConfig 'C:\VPN\profile.conf' -MediaOnly
+
+The launcher copies `yapfast.exe` alongside the installed executable under
+a unique temporary name, sets the existing `YAPFAST_STREAM_WORKER`
+environment variable for the launched Yapfast process, and configures
+WireSock's `AllowedApps` for **only that copied executable**.
+Yapfast's Discord gateway, text messages, authentication and voice calls
+stay on the regular connection. Sharing **and watching** streams, and other
+stream-worker media jobs, use the VPN. The copy is removed when Yapfast closes.
+
+No Rust rebuild is necessary for this mode, because existing Yapfast builds
+already support `YAPFAST_STREAM_WORKER`. The executable must be writable
+in its installation folder so the launcher can create the sibling copy.
+
+**Important:** Discord may check the location of the *gateway session* when
+allowing Go Live. With `-MediaOnly`, that session remains in Brazil.
+Thus this mode may preserve your normal voice latency but **not enable**
+Go Live if Discord rejects the stream at signalling time. For accounts
+where this happens, use the original whole-app mode instead.
+
 The script searches for Yapfast in the default installation directory
 (%LOCALAPPDATA%\Programs\Yapfast) or a Cargo debug/release build. If
 either executable is elsewhere, pass the explicit paths:
@@ -50,12 +75,12 @@ run -config), **not** wiresock-connect-cli, which has a different syntax.
 
 ## What changes
 
-- The generated profile uses WireSock's #@ws:AllowedApps filter for the
-  **full path of yapfast.exe**. Yapfast runs its --stream-worker as the
-  same executable, so both main app and capture/media worker are routed.
-- The entire process is routed, including gateway, authentication, voice
-  signalling, WebSocket and encrypted RTP/UDP video. A gateway-only
-  SOCKS proxy is not sufficient here.
+- Without -MediaOnly, the generated profile uses WireSock's #@ws:AllowedApps
+  filter for the full path of yapfast.exe, tunnelling the entire process.
+- With -MediaOnly, only the copied media worker is allowed through WireSock;
+  the main process and its Discord gateway/voice use normal routing.
+- A gateway-only SOCKS proxy is not sufficient for the original whole-app mode,
+  and a media-only tunnel cannot override Discord's gateway-side restrictions.
 - Games, browsers and other unrelated programs use their normal connection.
 - The launcher drops the DNS setting from its temporary WireGuard profile
   to avoid changing the Windows-wide DNS resolver. Some VPN endpoints may
@@ -74,7 +99,9 @@ The modified WireGuard profile is temporarily stored under
 %LOCALAPPDATA%\Yapfast\GoLiveTunnel with a restrictive ACL (user and
 SYSTEM) and removed on normal exit. A sudden shutdown can leave a
 wiresock-*.conf behind. Delete stale profiles in that directory because
-they contain WireGuard private keys.
+they contain WireGuard private keys. In -MediaOnly mode, any temporary
+`yapfast-golive-media-*.exe` left behind after a crash may be deleted when
+Yapfast is fully closed.
 
 If WireSock exits during startup, verify that WireSock and its driver are
 installed, the profile works independently and Windows permissions allow
