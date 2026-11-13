@@ -45,6 +45,18 @@ jobs:
           ) | Set-Content -Path $good -Encoding Ascii
           & powershell.exe -NoProfile -File $script -WireGuardConfig $good -YapfastExe $app -WireSockExe $cli -CheckOnly
           if ($LASTEXITCODE -ne 0) { throw 'A valid profile was rejected.' }
+          # Verify auto-discovery of the common WireSock Secure Connect/bin path.
+          $realProgramFiles = $env:ProgramFiles
+          try {
+            $env:ProgramFiles = Join-Path $folder 'Program Files'
+            $bin = Join-Path $env:ProgramFiles 'WireSock Secure Connect\bin'
+            New-Item -ItemType Directory -Path $bin -Force | Out-Null
+            Copy-Item -Path $cli -Destination (Join-Path $bin 'wiresock-client.exe')
+            & powershell.exe -NoProfile -File $script -WireGuardConfig $good -YapfastExe $app -CheckOnly
+            if ($LASTEXITCODE -ne 0) { throw 'The WireSock bin directory was not detected.' }
+          } finally {
+            $env:ProgramFiles = $realProgramFiles
+          }
 
           $bad = Join-Path $folder 'not-full-tunnel.conf'
           (Get-Content -Path $good) -replace '0.0.0.0/0, ::/0', '10.0.0.0/8' |
