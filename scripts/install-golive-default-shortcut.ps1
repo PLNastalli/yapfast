@@ -39,12 +39,19 @@ if ($Remove) {
     return
 }
 
-foreach ($path in @($WireGuardConfig, $Launcher, $YapfastExe)) {
+# The VPN profile is intentionally optional during shortcut installation.
+# It contains a private key, and the user may obtain it only later.
+# The shortcut points to that expected location and the launcher validates it
+# when opened, rather than silently skipping shortcut creation.
+foreach ($path in @($Launcher, $YapfastExe)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         throw "Required file not found: $path"
     }
 }
-$config = (Resolve-Path -LiteralPath $WireGuardConfig).ProviderPath
+$config = [System.IO.Path]::GetFullPath($WireGuardConfig)
+if (-not (Test-Path -LiteralPath $config -PathType Leaf)) {
+    Write-Warning "vpn.conf not found yet. The shortcut will exist but cannot connect until the profile is placed here: $config"
+}
 $script = (Resolve-Path -LiteralPath $Launcher).ProviderPath
 $app = (Resolve-Path -LiteralPath $YapfastExe).ProviderPath
 $hostExe = Join-Path $PSHOME 'powershell.exe'
