@@ -200,6 +200,22 @@ try {
         }
     }
 }
+catch {
+    # The shortcut is intentionally console-free, so persist a sanitized
+    # startup failure that the shortcut can direct the user to.
+    $errorPath = Join-Path $folder 'last-error.log'
+    $safeMessage = [string]$_.Exception.Message
+    $safeMessage = [regex]::Replace($safeMessage, '(?im)^\s*(PrivateKey|PresharedKey)\s*=[^\r\n]+', '$1 = [REDACTED]')
+    try {
+        [System.IO.File]::WriteAllText($errorPath, $safeMessage, [System.Text.Encoding]::UTF8)
+        if (Test-Path -LiteralPath $temporaryProfile -PathType Leaf) {
+            Set-Acl -LiteralPath $errorPath -AclObject (Get-Acl -LiteralPath $temporaryProfile)
+        }
+    } catch {
+        Write-Warning 'Could not save the Go Live startup diagnostics.'
+    }
+    throw
+}
 finally {
     if ($appProcess) {
         $appProcess.Refresh()
