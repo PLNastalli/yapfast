@@ -51,17 +51,17 @@ $wiresock = Find-Executable -Name 'wiresock-client.exe' -ExplicitPath $WireSockE
 
 # Do not execute arbitrary profile hooks. Single-peer full-tunnel profiles only.
 $original = [System.IO.File]::ReadAllText($configFile)
-$peerCount = [regex]::Matches($original, '(?im)^[ \t]*\[Peer\][ \t]*$').Count
-if ($original -notmatch '(?im)^[ \t]*\[Interface\][ \t]*$' -or $peerCount -ne 1) {
+$peerCount = [regex]::Matches($original, '(?im)^[ \t]*\[Peer\][ \t]*\r?$').Count
+if ($original -notmatch '(?im)^[ \t]*\[Interface\][ \t]*\r?$' -or $peerCount -ne 1) {
     throw 'Expected [Interface] and exactly one [Peer] section.'
 }
 if ($original -match '(?im)^[ \t]*(PreUp|PostUp|PreDown|PostDown)[ \t]*=') {
     throw 'WireGuard profiles with executable hooks are not accepted.'
 }
-if ($original -notmatch '(?im)^[ \t]*AllowedIPs[ \t]*=[^\r\n]*0\.0\.0\.0/0([ \t,]|$)') {
+if ($original -notmatch '(?im)^[ \t]*AllowedIPs[ \t]*=[^\r\n]*0\.0\.0\.0/0([ \t,\r\n]|$)') {
     throw 'Expected AllowedIPs to contain 0.0.0.0/0 in the peer.'
 }
-foreach ($header in [regex]::Matches($original, '(?im)^[ \t]*\[([^\]\r\n]+)\][ \t]*$')) {
+foreach ($header in [regex]::Matches($original, '(?im)^[ \t]*\[([^\]\r\n]+)\][ \t]*\r?$')) {
     if ($header.Groups[1].Value -notin @('Interface', 'Peer')) {
         throw "Unsupported profile section: $($header.Groups[1].Value)"
     }
@@ -107,12 +107,12 @@ $temporaryProfile = Join-Path $folder ('wiresock-' + [guid]::NewGuid().ToString(
 $vpnProcess = $null
 $appProcess = $null
 try {
-    [System.IO.File]::WriteAllText($temporaryProfile, $filteredProfile, (New-Object System.Text.UTF8Encoding($false)))
+    [System.IO.File]::WriteAllText($temporaryProfile, $filteredProfile, ([System.Text.UTF8Encoding]::new($false)))
     # WireGuard private keys should not be readable by other local users.
     $acl = Get-Acl -LiteralPath $temporaryProfile
     $acl.SetAccessRuleProtection($true, $false)
     $owner = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
-    $system = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-18')
+    $system = [System.Security.Principal.SecurityIdentifier]::new('S-1-5-18')
     foreach ($sid in @($owner, $system)) {
         $acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new(
             $sid,
