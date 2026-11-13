@@ -157,7 +157,7 @@ try {
 
     Write-Host 'Starting the VPN before opening Yapfast...'
     $arguments = @('run', '-config', ('"' + $temporaryProfile + '"'), '-log-level', 'error', '-network-lock', 'disabled')
-    $vpnProcess = Start-Process -FilePath $wiresock -ArgumentList $arguments -WorkingDirectory (Split-Path -Path $wiresock -Parent) -PassThru
+    $vpnProcess = Start-Process -FilePath $wiresock -ArgumentList $arguments -WorkingDirectory (Split-Path -Path $wiresock -Parent) -WindowStyle Hidden -PassThru
     Start-Sleep -Seconds 3
     $vpnProcess.Refresh()
     if ($vpnProcess.HasExited) {
