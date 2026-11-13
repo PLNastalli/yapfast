@@ -76,7 +76,7 @@ foreach ($link in $shortcuts) {
 # Replacing the existing Start Menu icon is opt-in, with one backup to
 # restore the original. Never overwrite an older saved backup.
 if ($ReplaceStartMenuShortcut) {
-    if (Test-Path -LiteralPath $original -PathType Leaf -and
+    if ((Test-Path -LiteralPath $original -PathType Leaf) -and
         -not (Test-Path -LiteralPath $backup)) {
         Copy-Item -LiteralPath $original -Destination $backup
     }
