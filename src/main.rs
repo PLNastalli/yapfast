@@ -28,6 +28,8 @@ mod emoji_font_tables;
 mod emoji_text;
 #[cfg(feature = "desktop")]
 mod graphics;
+#[cfg(all(windows, feature = "desktop", feature = "discord"))]
+mod golive;
 #[cfg(feature = "desktop")]
 mod icon;
 #[cfg(feature = "desktop")]
@@ -79,6 +81,11 @@ fn fix_mmap_threshold() {
 
 fn main() -> Result<()> {
     fix_mmap_threshold();
+    // A native elevated helper starts WireSock without opening the account/UI.
+    #[cfg(all(windows, feature = "desktop", feature = "discord"))]
+    if std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("--golive-vpn-helper")) {
+        return golive::helper_main(std::env::args_os().skip(2));
+    }
     // A stream worker starts nothing else: no UI, runtime or TLS.
     #[cfg(feature = "discord")]
     if std::env::args().nth(1).as_deref() == Some(yapfast_core::stream_worker::ARGUMENT) {
@@ -90,6 +97,8 @@ fn main() -> Result<()> {
     let handed = handed_link(&mut arguments);
     let renderer = renderer_argument(&mut arguments)?;
     let background = flag_argument(&mut arguments, "--background");
+    #[cfg(all(windows, feature = "desktop", feature = "discord"))]
+    let no_golive = flag_argument(&mut arguments, "--no-golive");
     let mut links: Vec<String> = handed.clone().ok().flatten().into_iter().collect();
     if !arguments
         .first()
@@ -136,6 +145,8 @@ fn main() -> Result<()> {
         background,
         arguments: &arguments,
         open_link,
+        #[cfg(all(windows, feature = "desktop", feature = "discord"))]
+        no_golive,
     };
     match arguments.as_slice() {
         [] => launch(runtime, yapfast_core::default_directory()?, false, start),
@@ -186,7 +197,7 @@ fn main() -> Result<()> {
         }
         [argument] if argument == "--help" || argument == "-h" => {
             println!(
-                "Usage: yapfast [--preview] [--data-dir PATH] [--renderer gpu|software] [--background] [LINK]\n       yapfast [--smoke-test | --version | --help | --release-discord-links]\n       yapfast --call-experiment [--resume PATH]\n       yapfast [--voice-demo | --audio-devices]\n       yapfast session login --homeserver URL --user USER --password-stdin [--data-dir PATH]\n       yapfast session status [--data-dir PATH]\n       yapfast session recover --key-stdin [--data-dir PATH]\n       yapfast session logout [--data-dir PATH]\n\nWithout arguments, opens native Slint chat and restores a saved session.\n--renderer selects Skia Software or Skia GPU for this start, over the setting.\nIf Skia GPU fails to start, Yapfast restarts with Skia Software.\n--background starts in the system tray with a saved session, as starting at sign-in does.\nLINK opens a Discord server, channel, message, profile or invite link in Yapfast.\n--release-discord-links gives discord:// links back to the app that had them, as uninstalling does.\n--preview opens local sample conversations without connecting to Matrix.\n--smoke-test checks the linked stack without signing in or opening audio devices.\n--version prints which build this is: its version, whether it is a stable release, a nightly or a development build, and its commit.\n--call-experiment creates disposable local accounts and checks encrypted synthetic audio. Start scripts/test-stack up first.\n--voice-demo creates two local accounts and a server with encrypted text and voice channels.\n--audio-devices lists native audio devices and cameras without recording.\nSession commands support password sign-in. Secrets are read from stdin."
+                "Usage: yapfast [--preview] [--data-dir PATH] [--renderer gpu|software] [--background] [--no-golive] [LINK]\n       yapfast [--smoke-test | --version | --help | --release-discord-links]\n       yapfast --call-experiment [--resume PATH]\n       yapfast [--voice-demo | --audio-devices]\n       yapfast session login --homeserver URL --user USER --password-stdin [--data-dir PATH]\n       yapfast session status [--data-dir PATH]\n       yapfast session recover --key-stdin [--data-dir PATH]\n       yapfast session logout [--data-dir PATH]\n\nWithout arguments, opens native Slint chat and restores a saved session.\n--renderer selects Skia Software or Skia GPU for this start, over the setting.\nIf Skia GPU fails to start, Yapfast restarts with Skia Software.\n--background starts in the system tray with a saved session, as starting at sign-in does.\n--no-golive temporarily bypasses the optional Windows WireSock Go Live VPN setting.\nLINK opens a Discord server, channel, message, profile or invite link in Yapfast.\n--release-discord-links gives discord:// links back to the app that had them, as uninstalling does.\n--preview opens local sample conversations without connecting to Matrix.\n--smoke-test checks the linked stack without signing in or opening audio devices.\n--version prints which build this is: its version, whether it is a stable release, a nightly or a development build, and its commit.\n--call-experiment creates disposable local accounts and checks encrypted synthetic audio. Start scripts/test-stack up first.\n--voice-demo creates two local accounts and a server with encrypted text and voice channels.\n--audio-devices lists native audio devices and cameras without recording.\nSession commands support password sign-in. Secrets are read from stdin."
             );
             Ok(())
         }
@@ -237,6 +248,9 @@ struct Start<'a> {
     arguments: &'a [String],
     /// A link handed to this start, as one word.
     open_link: Option<String>,
+    /// Emergency bypass when a configured WireSock tunnel cannot start.
+    #[cfg(all(windows, feature = "desktop", feature = "discord"))]
+    no_golive: bool,
 }
 
 #[cfg(feature = "desktop")]
@@ -253,7 +267,23 @@ fn launch(
     let fallback = std::env::var(GPU_FALLBACK_REASON).ok();
     #[cfg(feature = "discord")]
     yapfast_core::keep_discord_files(&root);
-    match ui::run(
+    // Own the VPN for the duration of the native desktop session. The
+    // stream worker is routed by executable path; no PowerShell/VBS required.
+    #[cfg(all(windows, feature = "desktop", feature = "discord"))]
+    let tunnel = if !preview && !start.no_golive {
+        match golive::start(&root) {
+            Ok(tunnel) => tunnel,
+            Err(error) => {
+                golive::error_popup(&format!(
+                    "The Go Live VPN could not start:\n{error:#}\n\nTo open Yapfast without a VPN, start it with --no-golive and turn the setting off in Advanced."
+                ));
+                return Err(error);
+            }
+        }
+    } else {
+        None
+    };
+    let result = ui::run(
         runtime,
         root,
         preview,
@@ -261,7 +291,10 @@ fn launch(
         fallback,
         start.background,
         start.open_link.clone(),
-    )? {
+    )?;
+    #[cfg(all(windows, feature = "desktop", feature = "discord"))]
+    drop(tunnel);
+    match result {
         ui::Exit::Closed => Ok(()),
         // The GPU failed before anything opened the link: the next start does.
         ui::Exit::UseSoftware(reason) => {
