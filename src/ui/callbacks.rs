@@ -2229,6 +2229,28 @@ pub(super) fn bind_callbacks(window: &YapfastWindow, adapter: &Rc<RefCell<Adapte
     });
     let state = adapter.clone();
     let weak = window.as_weak();
+    #[cfg(all(windows, feature = "discord"))]
+    {
+        let state = adapter.clone();
+        let weak = window.as_weak();
+        window.on_choose_golive_profile(move || {
+            let Some(profile) = rfd::FileDialog::new()
+                .add_filter("WireGuard profile", &["conf"])
+                .pick_file()
+            else {
+                return;
+            };
+            let root = state.borrow().root.clone();
+            match crate::golive::set_profile(&root, &profile) {
+                Ok(()) => {
+                    if let Some(window) = weak.upgrade() {
+                        window.set_golive_profile(crate::golive::profile_display(&root).into());
+                    }
+                }
+                Err(error) => tracing::warn!(%error, "could not save WireGuard profile path"),
+            }
+        });
+    }
     window.on_preferences_changed(move || {
         let Some(window) = weak.upgrade() else { return };
         let mut adapter = state.borrow_mut();
@@ -2284,6 +2306,11 @@ pub(super) fn bind_callbacks(window: &YapfastWindow, adapter: &Rc<RefCell<Adapte
         layout.close_to_tray = Some(window.get_close_to_tray());
         layout.multiple_windows = window.get_multiple_windows();
         layout.developer_mode = window.get_developer_mode();
+        #[cfg(all(windows, feature = "discord"))]
+        if let Err(error) = crate::golive::set_enabled(&adapter.root, window.get_golive_vpn()) {
+            tracing::warn!(%error, "could not save Go Live VPN setting");
+            window.set_golive_vpn(crate::golive::enabled(&adapter.root));
+        }
         adapter.layout.write(&adapter.root);
         adapter.watch_talk_key(&window);
         let start = window.get_start_on_sign_in();
