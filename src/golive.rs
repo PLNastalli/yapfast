@@ -141,13 +141,16 @@ fn find_wiresock() -> Result<PathBuf> {
 fn filter_profile(source: &str, worker: &Path) -> Result<String> {
     let mut peers = 0;
     let mut interface = false;
+    let mut in_peer = false;
     let mut route = false;
     for line in source.lines() {
         let clean = line.trim();
         if clean.eq_ignore_ascii_case("[Interface]") {
             interface = true;
+            in_peer = false;
         } else if clean.eq_ignore_ascii_case("[Peer]") {
             peers += 1;
+            in_peer = true;
         } else if clean.starts_with('[') && clean.ends_with(']') {
             bail!("unsupported WireGuard configuration section: {clean}");
         }
@@ -156,7 +159,7 @@ fn filter_profile(source: &str, worker: &Path) -> Result<String> {
             if ["PreUp", "PostUp", "PreDown", "PostDown"].iter().any(|hook| key.eq_ignore_ascii_case(hook)) {
                 bail!("WireGuard profile hooks are not permitted");
             }
-            if key.eq_ignore_ascii_case("AllowedIPs")
+            if in_peer && key.eq_ignore_ascii_case("AllowedIPs")
                 && value.split(',').any(|route| route.trim() == "0.0.0.0/0")
             {
                 route = true;
@@ -314,7 +317,10 @@ pub(crate) fn start(root: &Path) -> Result<Option<Tunnel>> {
         thread::sleep(Duration::from_millis(150));
     }
 
-    yapfast_core::stream_worker::set_media_worker_executable(worker.clone())?;
+    if let Err(error) = yapfast_core::stream_worker::set_media_worker_executable(worker.clone()) {
+        abandoned(&directory, &worker, helper);
+        return Err(error);
+    }
     let stopping = Arc::new(AtomicBool::new(false));
     let flag = stopping.clone();
     // Watch the elevated helper; if WireSock dies, fail closed instead of
@@ -325,7 +331,8 @@ pub(crate) fn start(root: &Path) -> Result<Option<Tunnel>> {
             if flag.load(Ordering::SeqCst) { break; }
             let state = unsafe { WaitForSingleObject(handle as HANDLE, 350) };
             if state != WAIT_TIMEOUT && !flag.load(Ordering::SeqCst) {
-                error_popup("The WireSock tunnel stopped. Yapfast must close to prevent direct media traffic. See the GoLive log in your Yapfast data folder.");
+                // Do not block on a message box while media might reconnect
+                // outside the tunnel: fail closed immediately.
                 std::process::exit(1);
             }
         }
