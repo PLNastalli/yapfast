@@ -58,3 +58,5 @@ jobs:
             $ErrorActionPreference = $originalPreference
           }
           if ($badExitCode -eq 0) { throw 'A profile without a default route was accepted.' }
+          # GitHub's PowerShell runner exits with LASTEXITCODE if left nonzero.
+          $global:LASTEXITCODE = 0
