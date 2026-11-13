@@ -16,7 +16,7 @@ use std::{
     path::PathBuf,
     process::{Child, ChildStdin, Command, ExitStatus, Stdio},
     sync::{
-        Arc, Mutex,
+        Arc, Mutex, OnceLock,
         atomic::{AtomicBool, Ordering},
         mpsc as channel,
     },
@@ -48,6 +48,14 @@ use crate::{
 
 /// The argument that starts Yapfast as a stream worker.
 pub const ARGUMENT: &str = "--stream-worker";
+
+/// Native Go Live tunnel chooses the worker executable without changing the
+/// process environment while async and GUI threads are running.
+static MEDIA_WORKER_EXE: OnceLock<PathBuf> = OnceLock::new();
+
+pub fn set_media_worker_executable(path: PathBuf) -> Result<()> {
+    MEDIA_WORKER_EXE.set(path).map_err(|_| anyhow!("media worker was already configured"))
+}
 
 /// The largest frame shared at 1080p. Discord's own client trials 1080p at
 /// 30 fps for accounts without Nitro, up to 5 Mbit/s (its "frontier tuning"
@@ -1534,9 +1542,12 @@ impl Worker {
 
     fn start(job: &Job) -> Result<(Self, mpsc::UnboundedReceiver<Report>)> {
         // Tests run from their own binary, so they name Yapfast's.
-        let program = match std::env::var_os("YAPFAST_STREAM_WORKER") {
-            Some(program) => PathBuf::from(program),
-            None => running_yapfast()?,
+        let program = match MEDIA_WORKER_EXE.get() {
+            Some(program) => program.clone(),
+            None => match std::env::var_os("YAPFAST_STREAM_WORKER") {
+                Some(program) => PathBuf::from(program),
+                None => running_yapfast()?,
+            },
         };
         let mut child = Command::new(program)
             .arg(ARGUMENT)
