@@ -7,6 +7,13 @@ on:
       - "scripts/install-golive-default-shortcut.ps1"
       - "scripts/install-golive-all.ps1"
       - ".github/workflows/test-golive-wiresock.yml"
+      - "src/golive.rs"
+      - "src/main.rs"
+      - "src/ui.rs"
+      - "src/ui/callbacks.rs"
+      - "ui/settings.slint"
+      - "ui/yapfast.slint"
+      - "crates/yapfast-core/src/stream_worker.rs"
   workflow_dispatch:
 
 jobs:
@@ -14,6 +21,11 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Check formatting of native Rust Go Live integration
+        shell: pwsh
+        run: |
+          rustup component add rustfmt
+          rustfmt --edition 2024 --check src/golive.rs src/main.rs src/ui.rs src/ui/callbacks.rs crates/yapfast-core/src/stream_worker.rs
       - name: Parse in Windows PowerShell 5.1
         shell: powershell
         run: |
