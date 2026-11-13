@@ -1374,6 +1374,11 @@ export component YapfastWindow inherits Window {
     /// where the platform can, outside the preview.
     in-out property <bool> start-on-sign-in;
     in property <bool> autostart-available;
+    /// Native Windows WireSock tunnel for the Go Live media worker alone.
+    in-out property <bool> golive-vpn;
+    in property <bool> golive-vpn-available;
+    in property <string> golive-profile;
+    callback choose-golive-profile();
     /// Discord protocol links open in Yapfast, where the platform can
     /// claim them, outside the preview.
     in-out property <bool> discord-links;
@@ -4456,6 +4461,9 @@ export component YapfastWindow inherits Window {
             multiple-windows <=> root.multiple-windows;
             developer-mode <=> root.developer-mode;
             start-on-sign-in <=> root.start-on-sign-in; autostart-available: root.autostart-available;
+            golive-vpn <=> root.golive-vpn; golive-vpn-available: root.golive-vpn-available;
+            golive-profile: root.golive-profile;
+            choose-golive-profile => { root.choose-golive-profile(); }
             discord-links <=> root.discord-links; discord-links-available: root.discord-links-available;
             preferences-changed => { root.preferences-changed(); }
             restart => { root.restart(); }
