@@ -51,7 +51,7 @@ $programRoots = @($env:ProgramFiles, [Environment]::GetEnvironmentVariable('Prog
     Select-Object -Unique
 foreach ($root in $programRoots) {
     foreach ($folder in @('WireSock Secure Connect', 'WireSock VPN Client', 'WireSock')) {
-        foreach ($subpath in @('bin\wiresock-client.exe', 'wiresock-client.exe')) {
+        foreach ($subpath in @('sdk\wiresock-client.exe', 'bin\wiresock-client.exe', 'wiresock-client.exe')) {
             $wireSockCandidates += Join-Path $root (Join-Path $folder $subpath)
         }
     }
