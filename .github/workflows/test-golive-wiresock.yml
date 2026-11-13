@@ -29,6 +29,30 @@ jobs:
             $errors | ForEach-Object { Write-Error $_.Message }
             throw 'PowerShell syntax check failed.'
           }
+      - name: Shortcut can be installed before VPN profile exists
+        shell: powershell
+        run: |
+          $testDir = Join-Path $env:RUNNER_TEMP 'golive-shortcut-tests'
+          New-Item -Path $testDir -ItemType Directory -Force | Out-Null
+          $fakeExe = Join-Path $testDir 'yapfast.exe'
+          New-Item -Path $fakeExe -ItemType File -Force | Out-Null
+          $launcher = Join-Path $env:GITHUB_WORKSPACE 'scripts\launch-golive-wiresock.ps1'
+          $setup = Join-Path $env:GITHUB_WORKSPACE 'scripts\install-golive-default-shortcut.ps1'
+          $missingProfile = Join-Path $testDir 'vpn.conf'
+          $shortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Yapfast GoLive.lnk'
+          try {
+            & $setup -Launcher $launcher -WireGuardConfig $missingProfile -YapfastExe $fakeExe
+            if (-not (Test-Path -LiteralPath $shortcut -PathType Leaf)) {
+              throw 'Shortcut was not created without vpn.conf.'
+            }
+            $shell = New-Object -ComObject WScript.Shell
+            $target = $shell.CreateShortcut($shortcut)
+            if ($target.Arguments -notmatch 'MediaOnly' -or $target.Arguments -notmatch 'vpn.conf') {
+              throw 'Shortcut did not preserve the media-only mode and future VPN path.'
+            }
+          } finally {
+            & $setup -Remove
+          }
       - name: Validate positive and negative profiles without connecting
         shell: powershell
         run: |
