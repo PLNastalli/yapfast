@@ -39,17 +39,73 @@ Download "$branchRoot/launch-golive-wiresock.ps1" $launcher
 Download "$branchRoot/install-golive-default-shortcut.ps1" $shortcutInstaller
 
 $app = Join-Path $env:LOCALAPPDATA 'Programs\Yapfast\yapfast.exe'
-if (-not $SkipAppInstall -and -not (Test-Path -LiteralPath $app -PathType Leaf)) {
-    Write-Host 'Checking the latest official Yapfast Windows release...'
-    $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/yapfast/yapfast/releases/latest' -Headers @{ 'User-Agent' = 'YapfastGoLiveSetup' }
-    $asset = @($release.assets | Where-Object { $_.name -match '^Yapfast-.*-windows-x64-setup\.exe$' } | Select-Object -First 1)
-    if ($asset.Count -ne 1) { throw 'No official Windows x64 installer was found in the latest Yapfast release.' }
-    $installerPath = Join-Path $dir $asset[0].name
-    Download $asset[0].browser_download_url $installerPath
-    Write-Host 'Starting the official Yapfast installer; complete its setup wizard.'
-    $installerProcess = Start-Process -FilePath $installerPath -PassThru -Wait
-    if ($installerProcess.ExitCode -ne 0) {
-        Write-Warning "Yapfast installer exited with code $($installerProcess.ExitCode)."
+if (-not $SkipAppInstall) {
+    # /releases/latest excludes prereleases: enumerate ALL releases so betas
+    # and nightlies are considered. Pick the latest published Windows x64
+    # release with a downloadable portable ZIP or normal installer.
+    Write-Host 'Checking official Yapfast releases (including beta/nightly)...'
+    $releases = @(Invoke-RestMethod -Uri 'https://api.github.com/repos/yapfast/yapfast/releases?per_page=100' -Headers @{ 'User-Agent' = 'YapfastGoLiveSetup' })
+    $chosenRelease = $null
+    $chosenAsset = $null
+    foreach ($candidate in @($releases | Where-Object { -not $_.draft } | Sort-Object -Property published_at -Descending)) {
+        $windowsZip = @($candidate.assets | Where-Object { $_.name -match '^Yapfast-.*-windows-x64\.zip$' } | Select-Object -First 1)
+        $windowsSetup = @($candidate.assets | Where-Object { $_.name -match '^Yapfast-.*-windows-x64-setup\.exe$' } | Select-Object -First 1)
+        if ($windowsSetup.Count -gt 0 -or $windowsZip.Count -gt 0) {
+            $chosenRelease = $candidate
+            # Prefer the standard installer when this SAME release offers one.
+            $chosenAsset = if ($windowsSetup.Count -gt 0) { $windowsSetup[0] } else { $windowsZip[0] }
+            break
+        }
+    }
+    if (-not $chosenRelease -or -not $chosenAsset) {
+        throw 'No Windows x64 asset found in the official Yapfast releases.'
+    }
+    Write-Host "Selected Yapfast $($chosenRelease.tag_name) (prerelease: $($chosenRelease.prerelease))."
+    $package = Join-Path $dir $chosenAsset.name
+    Download $chosenAsset.browser_download_url $package
+
+    # Every official package advertises its SHA-256 in SHA256SUMS.txt.
+    $sumsAsset = @($chosenRelease.assets | Where-Object { $_.name -eq 'SHA256SUMS.txt' } | Select-Object -First 1)
+    if ($sumsAsset.Count -ne 1) { throw 'The selected release has no SHA256SUMS.txt.' }
+    $sumsFile = Join-Path $dir 'SHA256SUMS.txt'
+    Download $sumsAsset[0].browser_download_url $sumsFile
+    $escapedName = [regex]::Escape($chosenAsset.name)
+    $checksums = [regex]::Matches(
+        [System.IO.File]::ReadAllText($sumsFile),
+        "(?im)^([a-f0-9]{64})\s+\*?$escapedName\s*$"
+    )
+    if ($checksums.Count -ne 1) { throw "No unique SHA-256 checksum for $($chosenAsset.name)." }
+    $expected = $checksums[0].Groups[1].Value
+    $actual = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash
+    if ($actual -ine $expected) {
+        Remove-Item -LiteralPath $package -Force
+        throw 'Yapfast download checksum mismatch. Installation stopped.'
+    }
+    Write-Host 'SHA-256 verified against the official release.'
+
+    if ($chosenAsset.name -like '*.zip') {
+        # Nightlies often ship *only* a portable ZIP, not a setup.exe.
+        # Extract into an isolated versioned folder, keeping stable Yapfast
+        # installations and their uninstallers untouched.
+        $versionName = $chosenRelease.tag_name -replace '[^a-zA-Z0-9_.-]', '_'
+        $portableDir = Join-Path $dir (Join-Path 'YapfastPortable' $versionName)
+        if (-not (Test-Path -LiteralPath $portableDir -PathType Container)) {
+            New-Item -ItemType Directory -Path $portableDir -Force | Out-Null
+            Expand-Archive -LiteralPath $package -DestinationPath $portableDir -Force
+        }
+        $exes = @(Get-ChildItem -LiteralPath $portableDir -Filter 'yapfast.exe' -Recurse -File -ErrorAction Stop)
+        if ($exes.Count -ne 1) { throw 'Expected exactly one yapfast.exe inside the portable release.' }
+        $app = $exes[0].FullName
+        Write-Host "Portable nightly ready: $app"
+    } else {
+        Write-Host 'Starting the official Yapfast installer; complete its setup wizard.'
+        $installerProcess = Start-Process -FilePath $package -PassThru -Wait
+        if ($installerProcess.ExitCode -ne 0) {
+            throw "Yapfast installer failed with exit code $($installerProcess.ExitCode)."
+        }
+        if (-not (Test-Path -LiteralPath $app -PathType Leaf)) {
+            throw "Yapfast installer finished but the executable was not found at $app"
+        }
     }
 }
 
@@ -85,7 +141,7 @@ if (-not (Test-Path -LiteralPath $app -PathType Leaf)) {
 } elseif (-not (Test-Path -LiteralPath $vpnConfig -PathType Leaf)) {
     Write-Host ''
     Write-Host "Download complete. Place your own WireGuard config at $vpnConfig"
-    Write-Host "Then run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File ""$shortcutInstaller"" -Launcher ""$launcher"" -WireGuardConfig ""$vpnConfig"" -ReplaceStartMenuShortcut"
+    Write-Host "Then run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File ""$shortcutInstaller"" -Launcher ""$launcher"" -WireGuardConfig ""$vpnConfig"" -YapfastExe ""$app"" -ReplaceStartMenuShortcut"
 } else {
     Write-Host 'Creating the default Yapfast GoLive shortcut...'
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $shortcutInstaller -Launcher $launcher -WireGuardConfig $vpnConfig -YapfastExe $app -ReplaceStartMenuShortcut
