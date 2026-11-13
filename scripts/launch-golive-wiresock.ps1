@@ -43,11 +43,20 @@ $yapfast = Find-Executable -Name 'yapfast.exe' -ExplicitPath $YapfastExe -Candid
     (Join-Path $PSScriptRoot '..\target\release\yapfast.exe'),
     (Join-Path $PSScriptRoot '..\target\debug\yapfast.exe')
 )
-$wiresock = Find-Executable -Name 'wiresock-client.exe' -ExplicitPath $WireSockExe -Candidates @(
-    (Join-Path $env:ProgramFiles 'WireSock VPN Client\wiresock-client.exe'),
-    (Join-Path $env:ProgramFiles 'WireSock Secure Connect\wiresock-client.exe'),
-    (Join-Path $env:ProgramFiles 'WireSock\wiresock-client.exe')
-)
+# WireSock installs its CLI in a "bin" subdirectory on many versions.
+# Check both 64-bit and 32-bit Program Files and preserve the older layouts.
+$wireSockCandidates = @()
+$programRoots = @($env:ProgramFiles, [Environment]::GetEnvironmentVariable('ProgramFiles(x86)')) |
+    Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Container) } |
+    Select-Object -Unique
+foreach ($root in $programRoots) {
+    foreach ($folder in @('WireSock Secure Connect', 'WireSock VPN Client', 'WireSock')) {
+        foreach ($subpath in @('bin\wiresock-client.exe', 'wiresock-client.exe')) {
+            $wireSockCandidates += Join-Path $root (Join-Path $folder $subpath)
+        }
+    }
+}
+$wiresock = Find-Executable -Name 'wiresock-client.exe' -ExplicitPath $WireSockExe -Candidates $wireSockCandidates
 
 # Do not execute arbitrary profile hooks. Single-peer full-tunnel profiles only.
 $original = [System.IO.File]::ReadAllText($configFile)
