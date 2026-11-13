@@ -49,5 +49,12 @@ jobs:
           $bad = Join-Path $folder 'not-full-tunnel.conf'
           (Get-Content -Path $good) -replace '0.0.0.0/0, ::/0', '10.0.0.0/8' |
             Set-Content -Path $bad -Encoding Ascii
-          & powershell.exe -NoProfile -File $script -WireGuardConfig $bad -YapfastExe $app -WireSockExe $cli -CheckOnly 2>&1 | Out-Null
-          if ($LASTEXITCODE -eq 0) { throw 'A profile without a default route was accepted.' }
+          $originalPreference = $ErrorActionPreference
+          $ErrorActionPreference = 'Continue'
+          try {
+            & powershell.exe -NoProfile -File $script -WireGuardConfig $bad -YapfastExe $app -WireSockExe $cli -CheckOnly 2>&1 | Out-Null
+            $badExitCode = $LASTEXITCODE
+          } finally {
+            $ErrorActionPreference = $originalPreference
+          }
+          if ($badExitCode -eq 0) { throw 'A profile without a default route was accepted.' }
